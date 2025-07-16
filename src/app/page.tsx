@@ -65,7 +65,7 @@ export default function Home() {
           <video
             ref={videoRef}
             className="w-full rounded"
-            src="./assets/video01.mp4"
+            src="./assets/video012.mp4"
           />
         </div>
 
