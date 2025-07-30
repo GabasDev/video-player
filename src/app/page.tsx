@@ -1,215 +1,210 @@
-"use client";
+'use client';
 
-import { useRef, useState, useEffect } from "react";
+import { useState, useRef, useEffect } from 'react';
+import { Play, Pause, Rewind, FastForward, Volume2, VolumeX, ListVideo } from 'lucide-react';
 
-interface Video {
-  id: number;
-  title: string;
-  description: string;
-  src: string;
-}
+// --- DADOS DOS VÍDEOS ---
+// CORREÇÃO: O caminho para os vídeos foi ajustado para incluir a pasta /assets,
+// conforme a sua estrutura de ficheiros.
+const videoData = [
+  { src: '/assets/video1.mp4', title: 'Vídeo 1' },
+  { src: '/assets/video2.mp4', title: 'Vídeo 2' },
+  { src: '/assets/video3.mp4', title: 'Vídeo 3' },
+  // Adicione mais vídeos aqui se desejar
+];
 
 export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const videos: Video[] = [
-    {
-      id: 1,
-      title: "Vídeo 1",
-      description: "Descrição do vídeo 1",
-      src: "/assets/video012.mp4",
-    },
-    {
-      id: 2,
-      title: "Vídeo 2",
-      description: "Descrição do vídeo 2",
-      src: "/assets/video002.mp4",
-    },
-    {
-      id: 3,
-      title: "Vídeo 3",
-      description: "Descrição do vídeo 3",
-      src: "/assets/video.mp4",
-    },
-  ];
+  // Estados
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [videoIndex, setVideoIndex] = useState<number>(0);
+  const [volume, setVolume] = useState<number>(1);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  const [selectedVideo, setSelectedVideo] = useState<Video>(videos[0]);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-
+  // Efeito para gerenciar os eventos do vídeo
   useEffect(() => {
     const video = videoRef.current;
-    if (video) {
-      video.pause();
-      video.load();
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-    }
-  }, [selectedVideo]);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
+
+    // Resetar tempo e duração ao trocar de vídeo
+    setCurrentTime(0);
+    setDuration(0);
+
+    video.volume = volume;
+    video.muted = isMuted;
+
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleLoadedMetadata = () => setDuration(video.duration);
+    const handleVideoEnded = () => {
+      // Avança para o próximo vídeo da lista
+      setVideoIndex((prevIndex) => (prevIndex + 1) % videoData.length);
+    };
+    const syncVolumeOnExternalChange = () => {
+        setVolume(video.volume);
+        setIsMuted(video.muted);
+    };
+    
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('ended', handleVideoEnded);
+    video.addEventListener('volumechange', syncVolumeOnExternalChange);
+
+    video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('ended', handleVideoEnded);
+      video.removeEventListener('volumechange', syncVolumeOnExternalChange);
+    };
+  }, [videoIndex]); // Este efeito executa sempre que o vídeo selecionado (videoIndex) muda.
+
+  // --- NOVAS FUNÇÕES ---
+  // Função para selecionar um vídeo da lista
+  const handleVideoSelect = (index: number) => {
+    if (index !== videoIndex) {
+      setVideoIndex(index);
     }
   };
 
-  const skipTime = (seconds: number) => {
+  // Funções de controle do player (sem alterações)
+  const formatTime = (time: number): string => {
+    if (isNaN(time) || time === 0) return '00:00';
+    const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+    const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+  };
+
+  const handlePlayPause = () => {
     const video = videoRef.current;
     if (video) {
-      video.currentTime = Math.min(Math.max(0, video.currentTime + seconds), video.duration);
-      setCurrentTime(video.currentTime);
+      if (isPlaying) {
+        video.pause();
+        setIsPlaying(false);
+      } else {
+        video.play();
+        setIsPlaying(true);
+      }
+    }
+  };
+  
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTime = Number(e.target.value);
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleSkip = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime += seconds;
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = Number(e.target.value);
+    setVolume(newVolume);
+    if(videoRef.current) {
+        videoRef.current.volume = newVolume;
+        if (newVolume > 0 && isMuted) {
+            setIsMuted(false);
+            videoRef.current.muted = false;
+        }
     }
   };
 
   const toggleMute = () => {
     const video = videoRef.current;
     if (video) {
-      video.muted = !video.muted;
-      setIsMuted(video.muted);
+        setIsMuted(!isMuted);
+        video.muted = !isMuted;
+        if (isMuted && volume === 0) {
+            setVolume(0.5);
+            video.volume = 0.5;
+        }
     }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
-    const video = videoRef.current;
-    if (video) {
-      video.volume = newVolume;
-      video.muted = false;
-      setIsMuted(false);
-      setVolume(newVolume);
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (video) setCurrentTime(video.currentTime);
-  };
-
-  const handleLoadedMetadata = () => {
-    const video = videoRef.current;
-    if (video) setDuration(video.duration);
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    const newTime = parseFloat(e.target.value);
-    if (video) {
-      video.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  };
-
-  const formatTime = (time: number) => {
-    const m = Math.floor(time / 60);
-    const s = Math.floor(time % 60);
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
   return (
-    <main className="min-h-screen flex flex-col md:flex-row bg-gray-900 p-6 gap-6 text-white">
-      {/* Lista de vídeos */}
-      <aside className="md:w-72 bg-gray-800 rounded p-4 max-h-[600px] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Lista de Vídeos</h2>
-        {videos.map((video) => (
-          <button
-            key={video.id}
-            onClick={() => setSelectedVideo(video)}
-            className={`block w-full text-left p-3 mb-2 rounded ${
-              video.id === selectedVideo.id ? "bg-indigo-600 font-semibold" : "bg-gray-700 hover:bg-gray-600"
-            }`}
-          >
-            <h3>{video.title}</h3>
-            <p className="text-sm text-gray-300">{video.description}</p>
-          </button>
-        ))}
-      </aside>
+    // Layout principal que se adapta a telas maiores (player ao lado da lista)
+    <main className="flex flex-col md:flex-row items-start justify-center min-h-screen p-4 sm:p-6 gap-6">
+      
+      {/* Coluna do Player */}
+      <div className="w-full md:flex-1 max-w-4xl">
+        <h1 className="text-2xl sm:text-3xl font-bold text-center mb-4 truncate">
+          {videoData[videoIndex].title}
+        </h1>
+        
+        <div className="relative">
+          <video
+            ref={videoRef}
+            src={videoData[videoIndex].src}
+            className="w-full rounded-lg shadow-2xl bg-black aspect-video"
+            onClick={handlePlayPause}
+          />
+        </div>
 
-      {/* Player */}
-      <section className="flex-1 max-w-3xl bg-black rounded shadow overflow-hidden">
-        <video
-          ref={videoRef}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          className="w-full"
-          controls={false}
-          key={selectedVideo.src}
-        >
-          <source src={selectedVideo.src} type="video/mp4" />
-          Seu navegador não suporta vídeo.
-        </video>
-
-        <div className="p-4 bg-gray-800 space-y-4">
-          <h2 className="text-2xl font-semibold">{selectedVideo.title}</h2>
-
-          {/* Controles */}
-          <div className="flex flex-wrap gap-4 justify-center sm:justify-between items-center">
-            <button
-              onClick={togglePlay}
-              className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded"
-            >
-              {isPlaying ? "⏸️ Pausar" : "▶️ Reproduzir"}
-            </button>
-            <button
-              onClick={() => skipTime(-10)}
-              className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded"
-            >
-              ⏪ Voltar 10s
-            </button>
-            <button
-              onClick={() => skipTime(10)}
-              className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded"
-            >
-              Avançar 10s ⏩
-            </button>
-          </div>
-
-          {/* Barra de progresso */}
-          <div className="flex items-center gap-2">
-            <span>{formatTime(currentTime)}</span>
-            <input
-              type="range"
-              min={0}
-              max={duration}
-              value={currentTime}
-              onChange={handleSeek}
-              className="flex-1"
-            />
-            <span>{formatTime(duration)}</span>
-          </div>
-
-          {/* Volume e mute */}
-          <div className="flex justify-between items-center gap-4 flex-wrap">
+        {/* Controles */}
+        <div className="mt-4 space-y-3">
+          <input
+            type="range"
+            min="0"
+            max={duration}
+            value={currentTime}
+            onChange={handleSliderChange}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+          />
+          <div className="flex justify-between items-center text-sm">
             <div className="flex items-center gap-2">
-              <label>Volume</label>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
+              <button onClick={() => handleSkip(-10)} className="p-2 hover:bg-gray-700 rounded-full transition-colors"><Rewind size={20} /></button>
+              <button onClick={handlePlayPause} className="p-3 bg-violet-600 hover:bg-violet-700 rounded-full transition-colors">
+                {isPlaying ? <Pause size={22} /> : <Play size={22} className="ml-1" />}
+              </button>
+              <button onClick={() => handleSkip(10)} className="p-2 hover:bg-gray-700 rounded-full transition-colors"><FastForward size={20} /></button>
+            </div>
+            <span className="font-mono text-gray-300">{formatTime(currentTime)} / {formatTime(duration)}</span>
+            <div className="flex items-center gap-2 w-32">
+              <button onClick={toggleMute} className="p-2 hover:bg-gray-700 rounded-full transition-colors">
+                {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              </button>
+              <input 
+                type="range" min="0" max="1" step="0.05" value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-32"
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
               />
             </div>
-            <button
-              onClick={toggleMute}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
-            >
-              {isMuted ? "🔇 Desmutar" : "🔊 Mutar"}
-            </button>
           </div>
         </div>
-      </section>
+      </div>
+
+      {/* Coluna da Lista de Vídeos */}
+      <div className="w-full md:w-72 lg:w-80 mt-8 md:mt-0">
+        <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+          <ListVideo size={24} />
+          Lista de Reprodução
+        </h2>
+        <ul className="space-y-2 max-h-[70vh] overflow-y-auto pr-2">
+          {videoData.map((video, index) => (
+            <li key={video.src}>
+              <button
+                onClick={() => handleVideoSelect(index)}
+                className={`w-full text-left p-3 rounded-lg transition-colors text-sm flex items-center gap-3 ${
+                  index === videoIndex
+                    ? 'bg-violet-600 text-white font-semibold'
+                    : 'bg-gray-800 hover:bg-gray-700'
+                }`}
+              >
+                {index === videoIndex ? <Play size={16}/> : <div className="w-4 h-4 rounded-full bg-gray-600"></div>}
+                <span className="truncate">{video.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </main>
   );
 }
